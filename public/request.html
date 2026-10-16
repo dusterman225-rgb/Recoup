@@ -1,1 +1,45 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Request a quote</title><meta name="robots" content="noindex">
+<style>
+:root{--bg:#f5f6f2;--card:#fff;--fg:#1b2430;--muted:#5b6676;--rule:#d5dde8;--hi:#f5d547;--bad:#b23a2b}
+@media (prefers-color-scheme:dark){:root{--bg:#141a22;--card:#1d2530;--fg:#eef1f5;--muted:#9aa6b6;--rule:#2f3a49;--bad:#f08a79}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif;padding:16px}
+main{max-width:520px;margin:0 auto;display:flex;flex-direction:column;gap:14px}h1{margin:8px 0 0;font-size:1.6rem}
+form{display:flex;flex-direction:column;gap:12px;background:var(--card);border:1px solid var(--rule);border-radius:10px;padding:14px}
+label{display:flex;flex-direction:column;gap:4px;font-weight:600;font-size:.95rem}
+input,textarea{font:inherit;color:inherit;background:var(--bg);border:1.5px solid var(--rule);border-radius:8px;padding:10px 12px;min-height:44px;width:100%}textarea{min-height:120px}
+button{font:inherit;font-weight:600;border:0;border-radius:10px;padding:12px;background:var(--hi);color:#1b2430;min-height:46px;cursor:pointer}button:disabled{opacity:.5}
+.m{color:var(--muted);font-size:.92rem}.e{color:var(--bad);font-weight:600}.hp{position:absolute;left:-9999px}
+</style></head><body><main id="m"><p class="m">Loading…</p></main>
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
+import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+import { firebaseConfig } from "./firebase-config.js";
+const m = document.getElementById("m"), b = new URLSearchParams(location.search).get("b") || "";
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const msg = t => { m.innerHTML = `<h1>Request a quote</h1><p class="m">${esc(t)}</p>`; };
+(async () => {
+  if (/^PASTE/.test(firebaseConfig.apiKey) || !/^[A-Za-z0-9_-]{2,64}$/.test(b)) return msg("This link isn't valid.");
+  const db = getFirestore(initializeApp(firebaseConfig));
+  let p; try { p = (await getDoc(doc(db, "users", b, "public", "profile"))).data(); } catch { return msg("This page isn't available right now."); }
+  if (!p || !p.leadForm) return msg("This business isn't taking requests through this page right now.");
+  m.innerHTML = `<h1>Request a quote from ${esc(p.name || "us")}</h1><p class="m">Tell us what you need. We'll get back to you${p.phone ? ", or call " + esc(p.phone) : ""}.</p>
+  <form id="f"><label>Your name<input name="name" required maxlength="120" autocomplete="name"></label>
+  <label>Email<input name="email" type="email" maxlength="200" autocomplete="email"></label><label>Phone<input name="phone" type="tel" maxlength="40" autocomplete="tel"></label>
+  <label>Address of the job <span class="m">(optional)</span><input name="address" maxlength="200" autocomplete="street-address"></label>
+  <label>What do you need done?<textarea name="message" required maxlength="1500"></textarea></label>
+  <input class="hp" name="website" tabindex="-1" autocomplete="off" aria-hidden="true"><p class="e" id="er" hidden></p>
+  <button id="go">Send request</button><p class="m">Your details go only to ${esc(p.name || "this business")}.</p></form>`;
+  document.getElementById("f").addEventListener("submit", async e => {
+    e.preventDefault(); const f = new FormData(e.target), er = document.getElementById("er"), go = document.getElementById("go"); er.hidden = true;
+    if (f.get("website")) return msg("Thanks. Your request was sent.");
+    const email = String(f.get("email") || "").trim(), phone = String(f.get("phone") || "").trim();
+    if (!email && !phone) { er.textContent = "Add an email or a phone number so they can reach you."; er.hidden = false; return; }
+    go.disabled = true; const id = crypto.randomUUID();
+    try { await setDoc(doc(db, "users", b, "leads", id), { id, name: String(f.get("name")).trim().slice(0, 120), email: email.slice(0, 200), phone: phone.slice(0, 40), address: String(f.get("address") || "").trim().slice(0, 200), message: String(f.get("message")).trim().slice(0, 1500), status: "new", createdAt: new Date().toISOString() }); msg("Thanks. Your request was sent. You'll hear back soon."); }
+    catch { go.disabled = false; er.textContent = "Couldn't send. Check your connection and try again."; er.hidden = false; }
+  });
+})();
+</script></body></html>
 
