@@ -1,1 +1,49 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isOwner(uid) { return request.auth != null && request.auth.uid == uid; }
 
+    // Each signed-in person can read and write only their own records, receipts and photos.
+    match /users/{uid}/data/{doc} { allow read, write: if isOwner(uid); }
+    match /users/{uid}/receipts/{doc} { allow read, write: if isOwner(uid); }
+    match /users/{uid}/files/{doc} { allow read, write: if isOwner(uid); }
+
+    // Approved messages: the owner can add one and read the log. Nobody can edit or delete it from
+    // the app, so the log is trustworthy. The sending function records the result.
+    match /users/{uid}/outbox/{id} {
+      allow read: if isOwner(uid);
+      allow create: if isOwner(uid)
+        && request.resource.data.status == 'approved'
+        && request.resource.data.channel in ['email', 'sms']
+        && request.resource.data.keys().hasOnly(['id','status','channel','kind','refId','to','subject','body','replyTo','fromName','approvedAt'])
+        && request.resource.data.subject.size() <= 200
+        && request.resource.data.body.size() <= 3000;
+      allow update, delete: if false;
+    }
+
+    // Card payments are written by the payment webhook only. The owner can read them.
+    match /users/{uid}/payments/{id} { allow read: if isOwner(uid); allow write: if false; }
+
+    // The small public card behind the request page: business name, phone, and whether the page is on.
+    match /users/{uid}/public/profile {
+      allow read: if true;
+      allow write: if isOwner(uid)
+        && request.resource.data.keys().hasOnly(['name','phone','leadForm'])
+        && request.resource.data.name.size() <= 120 && request.resource.data.phone.size() <= 40;
+    }
+
+    // Quote requests. Anyone can add one while the owner's request page is on. Only the owner can read or manage them.
+    match /users/{uid}/leads/{id} {
+      allow read, update, delete: if isOwner(uid);
+      allow create: if (isOwner(uid) || get(/databases/$(database)/documents/users/$(uid)/public/profile).data.leadForm == true)
+        && request.resource.data.keys().hasOnly(['id','name','email','phone','address','message','status','createdAt'])
+        && request.resource.data.name is string && request.resource.data.name.size() > 0 && request.resource.data.name.size() <= 120
+        && request.resource.data.email.size() <= 200 && request.resource.data.phone.size() <= 40 && request.resource.data.address.size() <= 200
+        && request.resource.data.message is string && request.resource.data.message.size() > 0 && request.resource.data.message.size() <= 1500
+        && request.resource.data.status == 'new';
+    }
+
+    // Everything else is closed.
+    match /{document=**} { allow read, write: if false; }
+  }
+}
