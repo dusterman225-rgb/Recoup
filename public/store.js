@@ -98,4 +98,3 @@ export async function callFunction(name, data) {
   const res = await httpsCallable(getFunctions(fbApp), name)(data);
   return res.data;
 }
-
