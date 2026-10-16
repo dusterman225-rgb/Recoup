@@ -197,4 +197,3 @@ acts.examples = () => {
   persistCore(); go("home"); toast("Example data added");
 };
 acts.rmexamples = () => { ["customers", "quotes", "jobs", "invoices", "costs", "events"].forEach(k => S[k] = S[k].filter(x => !x.ex)); persistCore(); render(); toast("Example data removed"); };
-
